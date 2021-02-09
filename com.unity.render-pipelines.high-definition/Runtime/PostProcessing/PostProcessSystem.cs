@@ -292,6 +292,10 @@ namespace UnityEngine.Rendering.HighDefinition
 
             // Override full screen anti-aliasing when doing path tracing (which is naturally anti-aliased already)
             m_AntialiasingFS        &= !m_PathTracing.enable.value;
+            
+            // Antialiasing of any sort is disabled on DRS Pre post processes.
+            // The assumption here is that upsamplers that work before post processes should perform anti aliasing as well in one go.
+            m_AntialiasingFS        &= DynamicResolutionHandler.instance.DynamicResolutionEnabled() && DynamicResolutionHandler.instance. && DynamicResolutionHandler.instance.schedulePolicy != DynamicResSchedulePolicy.BeforePost;
 
             m_DebugExposureCompensation = m_HDInstance.m_CurrentDebugDisplaySettings.data.lightingDebugSettings.debugExposure;
 
@@ -3306,6 +3310,8 @@ namespace UnityEngine.Rendering.HighDefinition
             public ComputeShader upsampleSceneCS;
             public int mainUpsampleKernel;
             public int viewCount;
+            public float width;
+            public float height;
         }
 
         UpsampleSceneParameters PrepareUpsampleSceneParameters(HDCamera camera)
@@ -3315,6 +3321,8 @@ namespace UnityEngine.Rendering.HighDefinition
             parameters.upsampleSceneCS = m_Resources.shaders.upsampleSceneCS;
             parameters.mainUpsampleKernel = parameters.upsampleSceneCS.FindKernel("MainUpsample");
             parameters.viewCount = camera.viewCount;
+            parameters.width = camera.finalViewport.width;
+            parameters.height = camera.finalViewport.height;
             return parameters;
         }
 
@@ -3336,15 +3344,12 @@ namespace UnityEngine.Rendering.HighDefinition
             cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputDepthTexture, outputDepth);
             cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputMotionVectorTexture, outputMotionVectors);
 
-            float width = (float)sourceColor.rt.width;
-            float height = (float)sourceColor.rt.height;
-
-            cmd.SetComputeVectorParam(cs, HDShaderIDs._ViewPortSize, new Vector4(width, height, 1.0f/width, 1.0f/height));
+            cmd.SetComputeVectorParam(cs, HDShaderIDs._ViewPortSize, new Vector4(parameters.width, parameters.height, 1.0f/parameters.width, 1.0f/parameters.height));
             
             const int xThreads = 8;
             const int yThreads = 4;
-            int dispatchX = HDUtils.DivRoundUp(Mathf.RoundToInt(width),  xThreads);
-            int dispatchY = HDUtils.DivRoundUp(Mathf.RoundToInt(height), yThreads);
+            int dispatchX = HDUtils.DivRoundUp(Mathf.RoundToInt(parameters.width),  xThreads);
+            int dispatchY = HDUtils.DivRoundUp(Mathf.RoundToInt(parameters.height), yThreads);
             cmd.DispatchCompute(cs, mainKernel, dispatchX, dispatchY, parameters.viewCount);
         }
 
