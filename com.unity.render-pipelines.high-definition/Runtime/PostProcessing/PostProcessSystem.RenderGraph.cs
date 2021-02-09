@@ -164,6 +164,19 @@ namespace UnityEngine.Rendering.HighDefinition
             public CustomPostProcessVolumeComponent customPostProcess;
         }
 
+        class SceneUpsamplingData
+        {
+            public struct Textures
+            {
+                public TextureHandle color;
+                public TextureHandle depthBuffer;
+                public TextureHandle motionVectors;
+            }
+            public UpsampleSceneParameters parameters;
+            public Textures inputTextures = new Textures();
+            public Textures outputTextures = new Textures();
+        }
+
         TextureHandle GetPostprocessOutputHandle(RenderGraph renderGraph, string name)
         {
             return renderGraph.CreateTexture(new TextureDesc(Vector2.one, true, true)
@@ -883,6 +896,59 @@ namespace UnityEngine.Rendering.HighDefinition
             return source;
         }
 
+        SceneUpsamplingData.Textures SceneUpsamplePass(RenderGraph renderGraph, HDCamera hdCamera, TextureHandle inputColor, TextureHandle inputDepth, TextureHandle inputMotionVectors)
+        {
+            SceneUpsamplingData.Textures outTextures;
+            using (var builder = renderGraph.AddRenderPass<SceneUpsamplingData>("Scene Upsampling", out var passData, ProfilingSampler.Get(HDProfileId.SceneUpsampling)))
+            {
+                passData.parameters = PrepareUpsampleSceneParameters(hdCamera);
+                passData.inputTextures.color = builder.ReadTexture(inputColor);
+                passData.inputTextures.depthBuffer = builder.ReadTexture(inputDepth);
+                passData.inputTextures.motionVectors = builder.ReadTexture(inputMotionVectors);
+                passData.outputTextures.color = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Color Buffer",
+                    colorFormat = renderGraph.GetTextureDesc(inputColor).colorFormat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.color = builder.WriteTexture(passData.outputTextures.color);
+
+                passData.outputTextures.depthBuffer = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Depth Buffer",
+                    colorFormat = GraphicsFormat.R32_SFloat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.depthBuffer = builder.WriteTexture(passData.outputTextures.depthBuffer);
+
+                passData.outputTextures.motionVectors = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Motion Vectors",
+                    colorFormat = renderGraph.GetTextureDesc(inputMotionVectors).colorFormat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.motionVectors = builder.WriteTexture(passData.outputTextures.motionVectors);
+
+                builder.SetRenderFunc(
+                    (SceneUpsamplingData data, RenderGraphContext ctx) =>
+                    {
+                        DoUpsampleScene(
+                            data.parameters, ctx.cmd,
+                            data.inputTextures.color,
+                            data.inputTextures.depthBuffer,
+                            data.inputTextures.motionVectors,
+                            data.outputTextures.color,
+                            data.outputTextures.depthBuffer,
+                            data.outputTextures.motionVectors);
+                    });
+                outTextures = passData.outputTextures;
+            }
+            return outTextures;
+        }
+
         void FinalPass(RenderGraph renderGraph, HDCamera hdCamera, TextureHandle afterPostProcessTexture, TextureHandle alphaTexture, TextureHandle finalRT, TextureHandle source, BlueNoise blueNoise, bool flipY)
         {
             using (var builder = renderGraph.AddRenderPass<FinalPassData>("Final Pass", out var passData, ProfilingSampler.Get(HDProfileId.FinalPost)))
@@ -1011,8 +1077,21 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 source = DynamicExposurePass(renderGraph, hdCamera, source);
 
+
+                if (DynamicResolutionHandler.instance.schedulePolicy == DynamicResSchedulePolicy.BeforePost
+                    && DynamicResolutionHandler.instance.DynamicResolutionEnabled())
+                {
+                    var upsamplignSceneResults = SceneUpsamplePass(renderGraph, hdCamera, source, depthBuffer, motionVectors);
+                    source = upsamplignSceneResults.color;
+                    depthBuffer = upsamplignSceneResults.depthBuffer;
+                    motionVectors = upsamplignSceneResults.motionVectors;
+                }
+
+
                 source = CustomPostProcessPass(renderGraph, hdCamera, source, depthBuffer, normalBuffer, HDRenderPipeline.defaultAsset.beforeTAACustomPostProcesses, HDProfileId.CustomPostProcessBeforeTAA);
 
+/*
+                //TODO: go over each post process and ensure correct resolution is used.
                 // Temporal anti-aliasing goes first
                 if (m_AntialiasingFS)
                 {
@@ -1039,7 +1118,6 @@ namespace UnityEngine.Rendering.HighDefinition
                 // This is one effect that would benefit from an overscan mode or supersampling in
                 // HDRP to reduce the amount of resolution lost at the center of the screen
                 source = PaniniProjectionPass(renderGraph, hdCamera, source);
-
                 TextureHandle bloomTexture = BloomPass(renderGraph, hdCamera, source);
                 TextureHandle logLutOutput = ColorGradingPass(renderGraph, hdCamera);
                 source = UberPass(renderGraph, hdCamera, logLutOutput, bloomTexture, source);
@@ -1049,11 +1127,15 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 source = FXAAPass(renderGraph, hdCamera, source);
 
+*/
                 hdCamera.resetPostProcessingHistory = false;
             }
 
-            // Contrast Adaptive Sharpen Upscaling
-            source = ContrastAdaptiveSharpeningPass(renderGraph, hdCamera, source);
+            // Contrast Adaptive Sharpen Upscaling, which only works after post effects
+            if (DynamicResolutionHandler.instance.schedulePolicy == DynamicResSchedulePolicy.AfterPost)
+            {
+                source = ContrastAdaptiveSharpeningPass(renderGraph, hdCamera, source);
+            }
 
             FinalPass(renderGraph, hdCamera, afterPostProcessTexture, alphaTexture, finalRT, source, blueNoise, flipY);
 

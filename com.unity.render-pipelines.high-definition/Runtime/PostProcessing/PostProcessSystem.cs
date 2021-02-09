@@ -3299,6 +3299,57 @@ namespace UnityEngine.Rendering.HighDefinition
 
         #endregion
 
+        #region Upsample Scene
+
+        struct UpsampleSceneParameters
+        {
+            public ComputeShader upsampleSceneCS;
+            public int mainUpsampleKernel;
+            public int viewCount;
+        }
+
+        UpsampleSceneParameters PrepareUpsampleSceneParameters(HDCamera camera)
+        {
+            var parameters = new UpsampleSceneParameters();
+
+            parameters.upsampleSceneCS = m_Resources.shaders.upsampleSceneCS;
+            parameters.mainUpsampleKernel = parameters.upsampleSceneCS.FindKernel("MainUpsample");
+            parameters.viewCount = camera.viewCount;
+            return parameters;
+        }
+
+        static void DoUpsampleScene(
+            UpsampleSceneParameters parameters, CommandBuffer cmd,
+            RTHandle sourceColor, RTHandle sourceDepth, RTHandle sourceMotionVectors,
+            RTHandle outputColor, RTHandle outputDepth, RTHandle outputMotionVectors)
+        {
+            var mainKernel = parameters.mainUpsampleKernel;
+            if (mainKernel < 0)
+                return;
+
+            var cs = parameters.upsampleSceneCS;
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._InputTexture, sourceColor);
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._InputDepth, sourceDepth);
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._CameraMotionVectorsTexture, sourceMotionVectors);
+
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputTexture, outputColor);
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputDepthTexture, outputDepth);
+            cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputMotionVectorTexture, outputMotionVectors);
+
+            float width = (float)sourceColor.rt.width;
+            float height = (float)sourceColor.rt.height;
+
+            cmd.SetComputeVectorParam(cs, HDShaderIDs._ViewPortSize, new Vector4(width, height, 1.0f/width, 1.0f/height));
+            
+            const int xThreads = 8;
+            const int yThreads = 4;
+            int dispatchX = HDUtils.DivRoundUp(Mathf.RoundToInt(width),  xThreads);
+            int dispatchY = HDUtils.DivRoundUp(Mathf.RoundToInt(height), yThreads);
+            cmd.DispatchCompute(cs, mainKernel, dispatchX, dispatchY, parameters.viewCount);
+        }
+
+        #endregion
+
         #region Final Pass
 
         struct FinalPassParameters
@@ -3376,20 +3427,27 @@ namespace UnityEngine.Rendering.HighDefinition
 
             if (dynamicResIsOn)
             {
-                switch (dynResHandler.filter)
+                if (DynamicResolutionHandler.instance.schedulePolicy == DynamicResSchedulePolicy.AfterPost)
                 {
-                    case DynamicResUpscaleFilter.Bilinear:
-                        finalPassMaterial.EnableKeyword("BILINEAR");
-                        break;
-                    case DynamicResUpscaleFilter.CatmullRom:
-                        finalPassMaterial.EnableKeyword("CATMULL_ROM_4");
-                        break;
-                    case DynamicResUpscaleFilter.Lanczos:
-                        finalPassMaterial.EnableKeyword("LANCZOS");
-                        break;
-                    case DynamicResUpscaleFilter.ContrastAdaptiveSharpen:
-                        finalPassMaterial.EnableKeyword("CONTRASTADAPTIVESHARPEN");
-                        break;
+                    switch (dynResHandler.filter)
+                    {
+                        case DynamicResUpscaleFilter.Bilinear:
+                            finalPassMaterial.EnableKeyword("BILINEAR");
+                            break;
+                        case DynamicResUpscaleFilter.CatmullRom:
+                            finalPassMaterial.EnableKeyword("CATMULL_ROM_4");
+                            break;
+                        case DynamicResUpscaleFilter.Lanczos:
+                            finalPassMaterial.EnableKeyword("LANCZOS");
+                            break;
+                        case DynamicResUpscaleFilter.ContrastAdaptiveSharpen:
+                            finalPassMaterial.EnableKeyword("BYPASS");
+                            break;
+                    }
+                }
+                else
+                {
+                    finalPassMaterial.EnableKeyword("BYPASS");
                 }
             }
 

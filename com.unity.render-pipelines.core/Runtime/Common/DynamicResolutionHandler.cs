@@ -24,6 +24,11 @@ namespace UnityEngine.Rendering
         ReturnsMinMaxLerpFactor
     }
 
+    public enum DynamicResSchedulePolicy
+    {
+        BeforePost,
+        AfterPost
+    }
 
     /// <summary>
     /// The class responsible to handle dynamic resolution.
@@ -45,6 +50,8 @@ namespace UnityEngine.Rendering
 
         private DynamicResScalePolicyType m_ScalerType = DynamicResScalePolicyType.ReturnsMinMaxLerpFactor;
 
+        private DynamicResSchedulePolicy m_SchedulePolicy = DynamicResSchedulePolicy.BeforePost;
+
         // Debug
         private Vector2Int cachedOriginalSize;
 
@@ -58,6 +65,8 @@ namespace UnityEngine.Rendering
         /// but the resolution the scaled rendered result will be upscaled to.
         /// </summary>
         public Vector2Int finalViewport { get; set; }
+
+        public DynamicResSchedulePolicy schedulePolicy { get {return m_SchedulePolicy; } set { m_SchedulePolicy = value; } }
 
 
         private DynamicResolutionType type;
