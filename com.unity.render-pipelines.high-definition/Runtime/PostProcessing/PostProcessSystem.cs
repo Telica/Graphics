@@ -292,7 +292,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
             // Override full screen anti-aliasing when doing path tracing (which is naturally anti-aliased already)
             m_AntialiasingFS        &= !m_PathTracing.enable.value;
-            
+
             // Antialiasing of any sort is disabled on DRS Pre post processes.
             // The assumption here is that upsamplers that work before post processes should perform anti aliasing as well in one go.
             m_AntialiasingFS        &= DynamicResolutionHandler.instance.DynamicResolutionEnabled() && DynamicResolutionHandler.instance.schedulePolicy != DynamicResSchedulePolicy.BeforePost;
@@ -3344,8 +3344,8 @@ namespace UnityEngine.Rendering.HighDefinition
             cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputDepthTexture, outputDepth);
             cmd.SetComputeTextureParam(cs, mainKernel, HDShaderIDs._OutputMotionVectorTexture, outputMotionVectors);
 
-            cmd.SetComputeVectorParam(cs, HDShaderIDs._ViewPortSize, new Vector4(parameters.width, parameters.height, 1.0f/parameters.width, 1.0f/parameters.height));
-            
+            cmd.SetComputeVectorParam(cs, HDShaderIDs._ViewPortSize, new Vector4(parameters.width, parameters.height, 1.0f / parameters.width, 1.0f / parameters.height));
+
             const int xThreads = 8;
             const int yThreads = 4;
             int dispatchX = HDUtils.DivRoundUp(Mathf.RoundToInt(parameters.width),  xThreads);

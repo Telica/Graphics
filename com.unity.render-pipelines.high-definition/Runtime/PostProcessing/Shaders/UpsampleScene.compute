@@ -14,14 +14,14 @@ RW_TEXTURE2D_X(float2, _OutputMotionVectorTexture);
 float4 _ViewPortSize;
 
 [numthreads(8,4,1)]
-void MainUpsample (uint3 dti : SV_DispatchThreadID) 
+void MainUpsample (uint3 dti : SV_DispatchThreadID)
 {
     if (any(dti.xy >= _ViewPortSize.xy))
         return;
 
     UNITY_XR_ASSIGN_VIEW_INDEX(dti.z);
 
-    float2 uvs = ((float2)dti.xy + 0.5f) * _ViewPortSize.zw; 
+    float2 uvs = ((float2)dti.xy + 0.5f) * _ViewPortSize.zw;
     _OutputTexture[COORD_TEXTURE2D_X(dti.xy)] = Bilinear(_InputTexture, uvs);
     _OutputDepthTexture[COORD_TEXTURE2D_X(dti.xy)] = Bilinear(_InputDepthTexture, uvs).x;
     _OutputMotionVectorTexture[COORD_TEXTURE2D_X(dti.xy)] = Bilinear(_CameraMotionVectorsTexture, uvs).xy;
