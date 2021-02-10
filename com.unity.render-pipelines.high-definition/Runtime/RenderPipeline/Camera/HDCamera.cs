@@ -619,7 +619,7 @@ namespace UnityEngine.Rendering.HighDefinition
             if (isMainGameView)
             {
                 scaledViewport = DynamicResolutionHandler.instance.GetScaledSize(nonScaledViewport);
-                hdCamera.ActiveResolutionGroup = ResolutionGroup.Downsampled;
+                ActiveResolutionGroup = ResolutionGroup.Downsampled;
             }
 
             m_ResolutionInfos[(int)ResolutionGroup.Downsampled] = new ResolutionInfo(scaledViewport);
@@ -736,12 +736,22 @@ namespace UnityEngine.Rendering.HighDefinition
 
         unsafe internal void UpdateShaderVariablesGlobalCB(ref ShaderVariablesGlobal cb)
             => UpdateShaderVariablesGlobalCB(ref cb, (int)cameraFrameCount);
+        
+        unsafe internal void UpdateScreenResolutionParametersCB(ref ShaderVariablesGlobal cb)
+        {
+            cb._ScreenSize = screenSize;
+            cb._RTHandleScale = RTHandles.rtHandleProperties.rtHandleScale;
+            cb._RTHandleScaleHistory = m_HistoryRTSystem.rtHandleProperties.rtHandleScale;
+            cb._ScreenParams = screenParams;
+        }
 
         unsafe internal void UpdateShaderVariablesGlobalCB(ref ShaderVariablesGlobal cb, int frameCount)
         {
             bool taaEnabled = frameSettings.IsEnabled(FrameSettingsField.Postprocess)
                 && antialiasing == AntialiasingMode.TemporalAntialiasing
                 && camera.cameraType == CameraType.Game;
+
+            UpdateScreenResolutionParametersCB(ref cb);
 
             cb._ViewMatrix = mainViewConstants.viewMatrix;
             cb._InvViewMatrix = mainViewConstants.invViewMatrix;
@@ -755,13 +765,9 @@ namespace UnityEngine.Rendering.HighDefinition
             cb._PrevInvViewProjMatrix = mainViewConstants.prevInvViewProjMatrix;
             cb._WorldSpaceCameraPos_Internal = mainViewConstants.worldSpaceCameraPos;
             cb._PrevCamPosRWS_Internal = mainViewConstants.prevWorldSpaceCameraPos;
-            cb._ScreenSize = screenSize;
-            cb._RTHandleScale = RTHandles.rtHandleProperties.rtHandleScale;
-            cb._RTHandleScaleHistory = m_HistoryRTSystem.rtHandleProperties.rtHandleScale;
             cb._ZBufferParams = zBufferParams;
             cb._ProjectionParams = projectionParams;
             cb.unity_OrthoParams = unity_OrthoParams;
-            cb._ScreenParams = screenParams;
             for (int i = 0; i < 6; ++i)
                 for (int j = 0; j < 4; ++j)
                     cb._FrustumPlanes[i * 4 + j] = frustumPlaneEquations[i][j];
