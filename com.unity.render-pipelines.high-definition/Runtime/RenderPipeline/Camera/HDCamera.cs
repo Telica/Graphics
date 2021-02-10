@@ -69,7 +69,12 @@ namespace UnityEngine.Rendering.HighDefinition
         /// Screen resolution information.
         /// Width, height, inverse width, inverse height.
         /// </summary>
-        public Vector4              screenSize;
+        public Vector4              screenSize
+        {
+            set { m_ScreenInfoStates[(int)m_CurrentSchedule].screenSize = value; }
+            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].screenSize; }
+        }
+
         /// <summary>Camera frustum.</summary>
         public Frustum              frustum;
         /// <summary>Camera component.</summary>
@@ -86,9 +91,17 @@ namespace UnityEngine.Rendering.HighDefinition
         internal int                volumetricValidFrames = 0;
 
         /// <summary>Width actually used for rendering after dynamic resolution and XR is applied.</summary>
-        public int                  actualWidth { get; private set; }
+        public int                  actualWidth
+        {
+            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].viewport.x; }
+        }
+
         /// <summary>Height actually used for rendering after dynamic resolution and XR is applied.</summary>
-        public int                  actualHeight { get; private set; }
+        public int                  actualHeight
+        {
+            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].viewport.y; }
+        }
+
         /// <summary>Number of MSAA samples used for this frame.</summary>
         public MSAASamples          msaaSamples { get; private set; }
         /// <summary>Frame settings for this camera.</summary>
@@ -199,6 +212,33 @@ namespace UnityEngine.Rendering.HighDefinition
             public bool rayTraced;
         }
 
+        internal enum CameraSchedule
+        {
+            Rasterizing,
+            PostProcessing,
+            AfterPostProcessing,
+            Count
+        }
+
+        internal struct ScreenInformation
+        {
+            public Vector2Int viewport;
+            public Vector4 screenSize;
+            public Vector4 screenParams;
+
+            public ScreenInformation(Vector2Int inViewport)
+            {
+                viewport = inViewport;
+                float width = viewport.x;
+                float height = viewport.y;
+                screenSize = new Vector4(width, height, 1.0f / width, 1.0f / height);
+                screenParams = new Vector4(screenSize.x, screenSize.y, 1.0f + screenSize.z, 1.0f + screenSize.w);
+            }
+        }
+
+        internal CameraSchedule     m_CurrentSchedule = CameraSchedule.Rasterizing;
+        internal ScreenInformation[]  m_ScreenInfoStates = new ScreenInformation[(int)CameraSchedule.Count];
+
         internal Vector4[]              frustumPlaneEquations;
         internal int                    taaFrameIndex;
         internal float                  taaSharpenStrength;
@@ -210,7 +250,12 @@ namespace UnityEngine.Rendering.HighDefinition
         internal Vector4                zBufferParams;
         internal Vector4                unity_OrthoParams;
         internal Vector4                projectionParams;
-        internal Vector4                screenParams;
+        internal Vector4                screenParams
+        {
+            set { m_ScreenInfoStates[(int)m_CurrentSchedule].screenParams = value; }
+            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].screenParams; }
+        }
+
         internal int                    volumeLayerMask;
         internal Transform              volumeAnchor;
         internal Rect                   finalViewport; // This will have the correct viewport position and the size will be full resolution (ie : not taking dynamic rez into account)
@@ -293,6 +338,11 @@ namespace UnityEngine.Rendering.HighDefinition
                 else // None
                     return HDAdditionalCameraData.ClearColorMode.None;
             }
+        }
+
+        internal void SetCameraStep(CameraSchedule schedule)
+        {
+            m_CurrentSchedule = schedule;
         }
 
         HDAdditionalCameraData.ClearColorMode m_PreviousClearColorMode = HDAdditionalCameraData.ClearColorMode.None;
@@ -564,28 +614,22 @@ namespace UnityEngine.Rendering.HighDefinition
                 {
                     finalViewport = GetPixelRect();
                 }
-
-                actualWidth = Math.Max((int)finalViewport.size.x, 1);
-                actualHeight = Math.Max((int)finalViewport.size.y, 1);
             }
 
             DynamicResolutionHandler.instance.finalViewport = new Vector2Int((int)finalViewport.width, (int)finalViewport.height);
 
-            Vector2Int nonScaledViewport = new Vector2Int(actualWidth, actualHeight);
+            Vector2Int nonScaledViewport = new Vector2Int(Math.Max((int)finalViewport.size.x, 1), Math.Max((int)finalViewport.size.y, 1));
+            Vector2Int scaledViewport = nonScaledViewport;
             if (isMainGameView)
             {
-                Vector2Int scaledSize = DynamicResolutionHandler.instance.GetScaledSize(new Vector2Int(actualWidth, actualHeight));
-                actualWidth = scaledSize.x;
-                actualHeight = scaledSize.y;
+                scaledViewport = DynamicResolutionHandler.instance.GetScaledSize(nonScaledViewport);
             }
 
-            var screenWidth = actualWidth;
-            var screenHeight = actualHeight;
+            m_ScreenInfoStates[(int)CameraSchedule.Rasterizing] = new ScreenInformation(scaledViewport);
+            m_ScreenInfoStates[(int)CameraSchedule.PostProcessing] = new ScreenInformation(scaledViewport);
+            m_ScreenInfoStates[(int)CameraSchedule.AfterPostProcessing] = new ScreenInformation(nonScaledViewport);
 
             msaaSamples = newMSAASamples;
-
-            screenSize = new Vector4(screenWidth, screenHeight, 1.0f / screenWidth, 1.0f / screenHeight);
-            screenParams = new Vector4(screenSize.x, screenSize.y, 1 + screenSize.z, 1 + screenSize.w);
 
             const int kMaxSampleCount = 8;
             if (++taaFrameIndex >= kMaxSampleCount)

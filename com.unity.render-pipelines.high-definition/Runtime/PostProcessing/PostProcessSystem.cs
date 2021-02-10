@@ -295,7 +295,7 @@ namespace UnityEngine.Rendering.HighDefinition
             
             // Antialiasing of any sort is disabled on DRS Pre post processes.
             // The assumption here is that upsamplers that work before post processes should perform anti aliasing as well in one go.
-            m_AntialiasingFS        &= DynamicResolutionHandler.instance.DynamicResolutionEnabled() && DynamicResolutionHandler.instance. && DynamicResolutionHandler.instance.schedulePolicy != DynamicResSchedulePolicy.BeforePost;
+            m_AntialiasingFS        &= DynamicResolutionHandler.instance.DynamicResolutionEnabled() && DynamicResolutionHandler.instance.schedulePolicy != DynamicResSchedulePolicy.BeforePost;
 
             m_DebugExposureCompensation = m_HDInstance.m_CurrentDebugDisplaySettings.data.lightingDebugSettings.debugExposure;
 
