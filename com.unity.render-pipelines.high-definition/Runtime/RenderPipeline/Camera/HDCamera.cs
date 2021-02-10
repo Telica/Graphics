@@ -71,8 +71,8 @@ namespace UnityEngine.Rendering.HighDefinition
         /// </summary>
         public Vector4              screenSize
         {
-            set { m_ScreenInfoStates[(int)m_CurrentSchedule].screenSize = value; }
-            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].screenSize; }
+            set { m_ResolutionInfos[(int)m_ActiveResolutionGroup].screenSize = value; }
+            get { return m_ResolutionInfos[(int)m_ActiveResolutionGroup].screenSize; }
         }
 
         /// <summary>Camera frustum.</summary>
@@ -93,13 +93,13 @@ namespace UnityEngine.Rendering.HighDefinition
         /// <summary>Width actually used for rendering after dynamic resolution and XR is applied.</summary>
         public int                  actualWidth
         {
-            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].viewport.x; }
+            get { return m_ResolutionInfos[(int)m_ActiveResolutionGroup].viewport.x; }
         }
 
         /// <summary>Height actually used for rendering after dynamic resolution and XR is applied.</summary>
         public int                  actualHeight
         {
-            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].viewport.y; }
+            get { return m_ResolutionInfos[(int)m_ActiveResolutionGroup].viewport.y; }
         }
 
         /// <summary>Number of MSAA samples used for this frame.</summary>
@@ -146,7 +146,7 @@ namespace UnityEngine.Rendering.HighDefinition
             volumetricHistoryIsValid = false;
             volumetricValidFrames = 0;
             colorPyramidHistoryIsValid = false;
-            Schedule = CameraSchedule.Rasterizing;
+            ActiveResolutionGroup = ResolutionGroup.Full;
         }
 
         /// <summary>
@@ -213,21 +213,20 @@ namespace UnityEngine.Rendering.HighDefinition
             public bool rayTraced;
         }
 
-        internal enum CameraSchedule
+        internal enum ResolutionGroup
         {
-            Rasterizing,
-            PostProcessing,
-            AfterPostProcessing,
+            Downsampled,
+            Full,
             Count
         }
 
-        internal struct ScreenInformation
+        internal struct ResolutionInfo
         {
             public Vector2Int viewport;
             public Vector4 screenSize;
             public Vector4 screenParams;
 
-            public ScreenInformation(Vector2Int inViewport)
+            public ResolutionInfo(Vector2Int inViewport)
             {
                 viewport = inViewport;
                 float width = viewport.x;
@@ -237,9 +236,9 @@ namespace UnityEngine.Rendering.HighDefinition
             }
         }
 
-        internal CameraSchedule Schedule { set { m_CurrentSchedule = value; } }
-        private CameraSchedule     m_CurrentSchedule = CameraSchedule.Rasterizing;
-        internal ScreenInformation[]  m_ScreenInfoStates = new ScreenInformation[(int)CameraSchedule.Count];
+        internal ResolutionGroup   ActiveResolutionGroup { set { m_ActiveResolutionGroup = value; } }
+        private  ResolutionGroup   m_ActiveResolutionGroup = ResolutionGroup.Full;
+        internal ResolutionInfo[]  m_ResolutionInfos = new ResolutionInfo[(int)ResolutionGroup.Count];
 
         internal Vector4[]              frustumPlaneEquations;
         internal int                    taaFrameIndex;
@@ -254,8 +253,8 @@ namespace UnityEngine.Rendering.HighDefinition
         internal Vector4                projectionParams;
         internal Vector4                screenParams
         {
-            set { m_ScreenInfoStates[(int)m_CurrentSchedule].screenParams = value; }
-            get { return m_ScreenInfoStates[(int)m_CurrentSchedule].screenParams; }
+            set { m_ResolutionInfos[(int)m_ActiveResolutionGroup].screenParams = value; }
+            get { return m_ResolutionInfos[(int)m_ActiveResolutionGroup].screenParams; }
         }
 
         internal int                    volumeLayerMask;
@@ -620,11 +619,11 @@ namespace UnityEngine.Rendering.HighDefinition
             if (isMainGameView)
             {
                 scaledViewport = DynamicResolutionHandler.instance.GetScaledSize(nonScaledViewport);
+                hdCamera.ActiveResolutionGroup = ResolutionGroup.Downsampled;
             }
 
-            m_ScreenInfoStates[(int)CameraSchedule.Rasterizing] = new ScreenInformation(scaledViewport);
-            m_ScreenInfoStates[(int)CameraSchedule.PostProcessing] = new ScreenInformation(scaledViewport);
-            m_ScreenInfoStates[(int)CameraSchedule.AfterPostProcessing] = new ScreenInformation(nonScaledViewport);
+            m_ResolutionInfos[(int)ResolutionGroup.Downsampled] = new ResolutionInfo(scaledViewport);
+            m_ResolutionInfos[(int)ResolutionGroup.Full] = new ResolutionInfo(nonScaledViewport);
 
             msaaSamples = newMSAASamples;
 
@@ -651,8 +650,6 @@ namespace UnityEngine.Rendering.HighDefinition
         // The reason is that RTHandle will hold data necessary to setup RenderTargets and viewports properly.
         internal void BeginRender(CommandBuffer cmd)
         {
-            Schedule = CameraSchedule.Rasterizing;
-
             SetReferenceSize();
 
             m_RecorderCaptureActions = CameraCaptureBridge.GetCaptureActions(camera);

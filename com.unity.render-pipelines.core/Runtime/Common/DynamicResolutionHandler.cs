@@ -50,7 +50,7 @@ namespace UnityEngine.Rendering
 
         private DynamicResScalePolicyType m_ScalerType = DynamicResScalePolicyType.ReturnsMinMaxLerpFactor;
 
-        private DynamicResSchedulePolicy m_SchedulePolicy = DynamicResSchedulePolicy.BeforePost;
+        private DynamicResSchedulePolicy m_SchedulePolicy = DynamicResSchedulePolicy.AfterPost;
 
         // Debug
         private Vector2Int cachedOriginalSize;
