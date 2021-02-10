@@ -146,6 +146,7 @@ namespace UnityEngine.Rendering.HighDefinition
             volumetricHistoryIsValid = false;
             volumetricValidFrames = 0;
             colorPyramidHistoryIsValid = false;
+            Schedule = CameraSchedule.Rasterizing;
         }
 
         /// <summary>
@@ -236,7 +237,8 @@ namespace UnityEngine.Rendering.HighDefinition
             }
         }
 
-        internal CameraSchedule     m_CurrentSchedule = CameraSchedule.Rasterizing;
+        internal CameraSchedule Schedule { set { m_CurrentSchedule = value; } }
+        private CameraSchedule     m_CurrentSchedule = CameraSchedule.Rasterizing;
         internal ScreenInformation[]  m_ScreenInfoStates = new ScreenInformation[(int)CameraSchedule.Count];
 
         internal Vector4[]              frustumPlaneEquations;
@@ -338,11 +340,6 @@ namespace UnityEngine.Rendering.HighDefinition
                 else // None
                     return HDAdditionalCameraData.ClearColorMode.None;
             }
-        }
-
-        internal void SetCameraStep(CameraSchedule schedule)
-        {
-            m_CurrentSchedule = schedule;
         }
 
         HDAdditionalCameraData.ClearColorMode m_PreviousClearColorMode = HDAdditionalCameraData.ClearColorMode.None;
@@ -654,6 +651,8 @@ namespace UnityEngine.Rendering.HighDefinition
         // The reason is that RTHandle will hold data necessary to setup RenderTargets and viewports properly.
         internal void BeginRender(CommandBuffer cmd)
         {
+            Schedule = CameraSchedule.Rasterizing;
+
             SetReferenceSize();
 
             m_RecorderCaptureActions = CameraCaptureBridge.GetCaptureActions(camera);
